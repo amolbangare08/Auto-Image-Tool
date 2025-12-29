@@ -23,7 +23,7 @@
             padding: 20px;
             font-size: 13px;
             overflow: hidden;
-            user-select: none; /* Prevents accidental text selection */
+            user-select: none;
         }
 
         /* Header Area */
@@ -43,14 +43,12 @@
             letter-spacing: 0.5px;
         }
 
-        /* Right Side Controls */
         .header-controls {
             display: flex;
             align-items: center;
             gap: 15px;
         }
 
-        /* The Clear Button */
         .icon-btn {
             cursor: pointer;
             color: var(--text-secondary);
@@ -67,10 +65,6 @@
             background-color: var(--hover-bg);
         }
 
-        .icon-btn:active {
-            transform: scale(0.95);
-        }
-
         .status-dot {
             height: 8px;
             width: 8px;
@@ -80,7 +74,7 @@
             box-shadow: 0 0 8px rgba(46, 204, 113, 0.4);
         }
 
-        /* The List Container */
+        /* List Container */
         .log-container {
             height: calc(100vh - 80px);
             overflow-y: auto;
@@ -93,10 +87,7 @@
         ::-webkit-scrollbar-track { background: var(--panel-bg); }
         ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        table { width: 100%; border-collapse: collapse; }
 
         th {
             text-align: left;
@@ -145,7 +136,6 @@
 
     <div class="header">
         <h1>Auto Image</h1>
-        
         <div class="header-controls">
             <div class="icon-btn" onclick="clearLogs()" title="Clear Logs">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -153,7 +143,6 @@
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
             </div>
-            
             <div title="Server Active"><span class="status-dot"></span></div>
         </div>
     </div>
@@ -167,8 +156,7 @@
                     <th width="25%">Status</th>
                 </tr>
             </thead>
-            <tbody>
-                </tbody>
+            <tbody></tbody>
         </table>
     </div>
 
@@ -176,11 +164,174 @@
     <script src="server.js"></script>
 
     <script>
-        function clearLogs() {
+        var csInterface = new CSInterface();
+        
+        // 1. Initialize Log History from Local Storage
+        var logHistory = JSON.parse(localStorage.getItem("autoImageLogs") || "[]");
+
+        // 2. Render History on Startup
+        function renderHistory() {
             const tbody = document.querySelector("#logTable tbody");
-            if (tbody) {
-                tbody.innerHTML = "";
+            tbody.innerHTML = ""; // Clear current view
+            
+            // Loop through history and recreate rows
+            logHistory.forEach(log => {
+                insertRowToDOM(log.id, log.time, log.name, log.status);
+            });
+        }
+        
+        // Run immediately
+        renderHistory();
+
+        function saveLogs() {
+            localStorage.setItem("autoImageLogs", JSON.stringify(logHistory));
+        }
+
+        function clearLogs() {
+            logHistory = [];
+            saveLogs();
+            renderHistory();
+        }
+
+        // --- CORE UI FUNCTIONS (Called by Server) ---
+
+        // Helper: Inserts HTML only (used by both Load and New Item)
+        function insertRowToDOM(id, time, name, status) {
+            const tbody = document.querySelector("#logTable tbody");
+            const newRow = tbody.insertRow(0); // Insert at top
+            newRow.id = id;
+
+            const timeCell = newRow.insertCell(0);
+            const nameCell = newRow.insertCell(1);
+            const statusCell = newRow.insertCell(2);
+
+            timeCell.innerText = time;
+            nameCell.className = "file-name";
+            
+            // Set Name & Interactions
+            if (status === "success") {
+                nameCell.innerText = name;
+                nameCell.title = "Double-click to rename";
+                nameCell.style.cursor = "text";
+                nameCell.ondblclick = function() { enableRenaming(nameCell, name, id); };
+                statusCell.innerHTML = '<span class="badge success">Success</span>';
+            } else if (status === "error") {
+                nameCell.innerText = name;
+                statusCell.innerHTML = '<span class="badge error">Failed</span>';
+            } else {
+                nameCell.innerHTML = '<span style="color: #666">Downloading...</span>';
+                statusCell.innerHTML = '<span class="badge pending">Pending</span>';
             }
+        }
+
+        // 1. Create New Log (Called by Server)
+        window.createLogRow = function() {
+            const now = new Date();
+            const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const rowId = 'row-' + Date.now();
+            
+            // Add to Data
+            const newLog = { 
+                id: rowId, 
+                time: timeStr, 
+                name: "Downloading...", 
+                status: "pending" 
+            };
+            logHistory.push(newLog);
+            
+            // Render
+            insertRowToDOM(newLog.id, newLog.time, newLog.name, newLog.status);
+            
+            // Save
+            saveLogs();
+            return rowId;
+        };
+
+        // 2. Update Log (Called by Server)
+        window.updateLogRow = function(rowId, fileName, statusType) {
+            // Update Data
+            const logIndex = logHistory.findIndex(l => l.id === rowId);
+            if (logIndex !== -1) {
+                logHistory[logIndex].name = fileName;
+                logHistory[logIndex].status = statusType;
+                saveLogs();
+            }
+
+            // Update DOM directly to show changes instantly
+            const row = document.getElementById(rowId);
+            if (row) {
+                // We re-render just this row's content by calling insert logic logic? 
+                // Easier to just reload the whole list or update cells manually. 
+                // Let's update cells manually for speed.
+                const nameCell = row.cells[1];
+                const statusCell = row.cells[2];
+                
+                nameCell.innerText = fileName;
+                
+                if (statusType === "success") {
+                    statusCell.innerHTML = '<span class="badge success">Success</span>';
+                    nameCell.title = "Double-click to rename";
+                    nameCell.style.cursor = "text";
+                    nameCell.ondblclick = function() { enableRenaming(nameCell, fileName, rowId); };
+                } else {
+                    statusCell.innerHTML = '<span class="badge error">Failed</span>';
+                }
+            }
+        };
+
+        // --- RENAME LOGIC (Updated for Persistence) ---
+        function enableRenaming(cell, oldName, rowId) {
+            if (cell.querySelector('input')) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = oldName.replace('.png', '');
+            input.style.width = '100%';
+            input.style.background = '#333';
+            input.style.color = '#fff';
+            input.style.border = '1px solid #3498db';
+            input.style.outline = 'none';
+            
+            let isFinished = false;
+
+            cell.innerHTML = '';
+            cell.appendChild(input);
+            input.focus();
+            input.select(); 
+
+            function performSave() {
+                if (isFinished) return;
+                isFinished = true;
+
+                const newBaseName = input.value.trim();
+                
+                if (newBaseName && newBaseName !== oldName.replace('.png', '')) {
+                    const newFullName = newBaseName + ".png";
+                    
+                    // 1. Rename in Premiere
+                    csInterface.evalScript(`renameProjectItem('${oldName}', '${newFullName}')`);
+                    
+                    // 2. Update Data History & Save
+                    const logIndex = logHistory.findIndex(l => l.id === rowId);
+                    if (logIndex !== -1) {
+                        logHistory[logIndex].name = newFullName;
+                        saveLogs();
+                    }
+
+                    // 3. Update UI
+                    cell.innerHTML = newFullName;
+                    cell.className = "file-name"; 
+                    cell.ondblclick = function() { enableRenaming(cell, newFullName, rowId); };
+                } else {
+                    cell.innerHTML = oldName;
+                }
+            }
+
+            input.onkeydown = function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                if (e.key === 'Escape') { isFinished = true; cell.innerHTML = oldName; }
+            };
+            input.onblur = function() { performSave(); };
         }
     </script>
 </body>

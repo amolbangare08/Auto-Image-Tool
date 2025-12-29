@@ -41,3 +41,14 @@ function importImage(filePath) {
         }
     }
 }
+
+function renameProjectItem(oldName, newName) {
+    var targetBin = getTargetBin("Auto Image");
+    var item = findItemInBin(targetBin, oldName);
+    
+    if (item) {
+        item.name = newName;
+        return true;
+    }
+    return false;
+}
