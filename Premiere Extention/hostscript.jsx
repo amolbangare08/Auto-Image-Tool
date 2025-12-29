@@ -20,24 +20,32 @@ function findItemInBin(bin, itemName) {
     return null;
 }
 
-function importImage(filePath) {
+function importImage(filePath, altText) {
     app.project.rootItem.select();
 
     var targetBin = getTargetBin("Auto Image");
 
     if (filePath) {
+        // 1. Import the file
+        // suppressUI = true, targetBin = our bin, importAsNumberedStills = false
         app.project.importFiles([filePath], true, targetBin, false);
 
-        var fileName = filePath.split("\\").pop();
+        // 2. Determine the filename Premiere uses
+        // Using the File object is safer than string splitting for paths
+        var f = new File(filePath);
+        var fileName = f.name;
+
+        // 3. Find the newly imported item
         var importedItem = findItemInBin(targetBin, fileName);
 
         if (importedItem) {
-            var numSelected = app.project.rootItem.children.numItems;
-            for(var i=0; i < numSelected; i++) {
+            // 4. Rename it if altText is provided
+            if (altText && altText !== "undefined" && altText !== "") {
+                importedItem.name = altText;
             }
 
+            // 5. Select it
             importedItem.select();
-
         }
     }
 }

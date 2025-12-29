@@ -66,6 +66,7 @@ function convertImageToPngBuffer(inputBuffer) {
 app.post('/import', async (req, res) => {
     const imageUrl = req.body.url;
     let smartName = req.body.name;
+    let altText = req.body.alt || '';
 
     // 1. Create Row via Global UI Function
     // We access 'window' because we are in the same mixed context
@@ -110,10 +111,20 @@ app.post('/import', async (req, res) => {
 
         // 6. Save & Import
         fs.writeFileSync(finalFilePath, pngBuffer);
-        
+
         const cleanPath = finalFilePath.replace(/\\/g, "\\\\");
-        csInterface.evalScript(`importImage('${cleanPath}')`);
-        
+
+        // Prepare Alt Text (handle quotes to prevent script errors)
+        const safeAlt = altText
+            ? altText.replace(/'/g, "\\'").replace(/"/g, '\\"')
+            : "";
+
+        // Call the updated JSX function with BOTH arguments
+        csInterface.evalScript(`importImage('${cleanPath}', '${safeAlt}')`);
+
+        // REMOVED: The separate renameProjectItem block is no longer needed
+        // because we passed safeAlt directly to importImage above.
+
         // 7. Update UI via Global Function
         window.updateLogRow(rowId, filename, "success");
 

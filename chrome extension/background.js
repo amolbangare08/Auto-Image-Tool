@@ -43,9 +43,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         fetch('http://localhost:8088/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 url: imageUrl,
-                name: nameSuggestion 
+                name: nameSuggestion,
+                alt: lastImageInfo.alt
             })
         })
         .then(response => {
