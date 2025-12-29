@@ -12,7 +12,6 @@ const PORT = 8088;
 app.use(cors());
 app.use(express.json());
 
-// --- UI HELPERS ---
 function createLogRow() {
     const table = document.getElementById('logTable').getElementsByTagName('tbody')[0];
     const newRow = table.insertRow(0);
@@ -25,7 +24,7 @@ function createLogRow() {
 
     const now = new Date();
     timeCell.innerHTML = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    
+
     nameCell.innerHTML = '<span style="color: #666">Downloading...</span>';
     nameCell.className = "file-name";
     statusCell.innerHTML = '<span class="badge pending">Pending</span>';
@@ -49,7 +48,6 @@ function updateLogRow(rowId, fileName, statusType) {
     }
 }
 
-// --- PROJECT PATH HELPER ---
 function getProjectPath() {
     return new Promise((resolve) => {
         csInterface.evalScript('app.project.path', (result) => {
@@ -62,32 +60,23 @@ function getProjectPath() {
     });
 }
 
-// --- NEW HELPER: The "Browser" Converter ---
-// This uses the HTML Canvas to convert WebP/AVIF -> PNG natively
 function convertImageToPngBuffer(inputBuffer) {
     return new Promise((resolve, reject) => {
-        // 1. Create a Blob from the raw data
         const blob = new Blob([inputBuffer]);
         const url = URL.createObjectURL(blob);
         const img = new Image();
 
         img.onload = () => {
             try {
-                // 2. Draw image to an invisible canvas
                 const canvas = document.createElement('canvas');
                 canvas.width = img.width;
                 canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
-                
-                // 3. Convert Canvas to PNG Data URL
-                const dataUrl = canvas.toDataURL('image/png');
-                
-                // 4. Clean up memory
-                URL.revokeObjectURL(url);
 
-                // 5. Convert Data URL back to Buffer for saving
-                // Remove the "data:image/png;base64," prefix
+                const dataUrl = canvas.toDataURL('image/png');
+
+                URL.revokeObjectURL(url);
                 const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
                 resolve(Buffer.from(base64Data, 'base64'));
             } catch (e) {
@@ -100,12 +89,10 @@ function convertImageToPngBuffer(inputBuffer) {
             reject(new Error("Image Format Not Supported"));
         };
 
-        // Trigger the load
         img.src = url;
     });
 }
 
-// --- MAIN ROUTE ---
 app.post('/import', async (req, res) => {
     const imageUrl = req.body.url;
     const rowId = createLogRow();
@@ -116,7 +103,6 @@ app.post('/import', async (req, res) => {
     }
 
     try {
-        // 1. Download Raw Data (We act like modern Chrome now!)
         const response = await axios({
             url: imageUrl,
             method: 'GET',
@@ -126,27 +112,21 @@ app.post('/import', async (req, res) => {
             }
         });
 
-        // 2. Convert to PNG using our new Browser Helper
         const pngBuffer = await convertImageToPngBuffer(response.data);
 
-        // 3. Determine Save Location
         const projectPath = await getProjectPath();
         let saveDir = projectPath ? path.dirname(projectPath) : os.tmpdir();
 
-        // 4. Save to Disk
-        const filename = `img_${Date.now()}.png`; // Always PNG now
+        const filename = `img_${Date.now()}.png`;
         const finalFilePath = path.join(saveDir, filename);
 
-        // Use standard FS to write the buffer
         fs.writeFileSync(finalFilePath, pngBuffer);
-        
+
         console.log("Saved to:", finalFilePath);
 
-        // 5. Import to Premiere
         const cleanPath = finalFilePath.replace(/\\/g, "\\\\");
         csInterface.evalScript(`importImage('${cleanPath}')`);
-        
-        // 6. Success UI
+
         updateLogRow(rowId, filename, "success");
 
         res.status(200).json({ status: "success", file: filename });
