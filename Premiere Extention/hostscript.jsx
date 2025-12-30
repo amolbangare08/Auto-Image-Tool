@@ -21,31 +21,36 @@ function findItemInBin(bin, itemName) {
 }
 
 function importImage(filePath, altText) {
-    app.project.rootItem.select();
-
+    // 1. Get the Bin
     var targetBin = getTargetBin("Auto Image");
 
     if (filePath) {
-        // 1. Import the file
+        // 2. Import the file
         // suppressUI = true, targetBin = our bin, importAsNumberedStills = false
         app.project.importFiles([filePath], true, targetBin, false);
 
-        // 2. Determine the filename Premiere uses
-        // Using the File object is safer than string splitting for paths
+        // 3. Determine the filename Premiere uses
         var f = new File(filePath);
         var fileName = f.name;
 
-        // 3. Find the newly imported item
+        // 4. Find the newly imported item
         var importedItem = findItemInBin(targetBin, fileName);
 
         if (importedItem) {
-            // 4. Rename it if altText is provided
+            // 5. Rename it if altText is provided
             if (altText && altText !== "undefined" && altText !== "") {
                 importedItem.name = altText;
             }
 
-            // 5. Select it
+            // 6. Focus Logic
+            // First, select the item in the Project Panel
             importedItem.select();
+
+            // Second, open it in the Source Monitor
+            // This forces Premiere to show the image, even if the bin is visually collapsed
+            if (app.sourceMonitor) {
+                app.sourceMonitor.openProjectItem(importedItem);
+            }
         }
     }
 }
