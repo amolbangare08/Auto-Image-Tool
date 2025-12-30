@@ -91,6 +91,9 @@ app.post('/import', async (req, res) => {
         // 3. Convert
         const pngBuffer = await convertImageToPngBuffer(response.data);
 
+        // [NEW] Generate Base64 string for the UI preview
+        const base64Preview = "data:image/png;base64," + pngBuffer.toString('base64');
+
         // 4. Determine Path
         const projectPath = await getProjectPath();
         let saveDir = projectPath ? path.dirname(projectPath) : os.tmpdir();
@@ -126,7 +129,8 @@ app.post('/import', async (req, res) => {
         // because we passed safeAlt directly to importImage above.
 
         // 7. Update UI via Global Function
-        window.updateLogRow(rowId, filename, "success");
+        // [CHANGED] We now pass the base64Preview as the 4th argument
+        window.updateLogRow(rowId, filename, "success", base64Preview);
 
         res.status(200).json({ status: "success", file: filename });
 

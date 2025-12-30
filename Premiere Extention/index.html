@@ -91,7 +91,7 @@
 
         th {
             text-align: left;
-            padding: 10px 15px;
+            padding: 10px 10px;
             color: var(--text-secondary);
             font-weight: 500;
             font-size: 11px;
@@ -104,9 +104,10 @@
         }
 
         td {
-            padding: 12px 15px;
+            padding: 8px 10px;
             border-bottom: 1px solid var(--border);
             color: var(--text-primary);
+            vertical-align: middle;
         }
 
         tr:last-child td { border-bottom: none; }
@@ -130,6 +131,34 @@
         .badge.success { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
         .badge.error   { background: rgba(231, 76, 60, 0.2);  color: #e74c3c; }
 
+        /* Thumbnail Styles */
+        .thumb-cell {
+            width: 50px;
+            text-align: center;
+            padding: 5px;
+        }
+
+        .thumb-img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+            background-color: #333;
+            display: block;
+        }
+        
+        .thumb-placeholder {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            background-color: #383838;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #666;
+        }
+
     </style>
 </head>
 <body>
@@ -151,9 +180,10 @@
         <table id="logTable">
             <thead>
                 <tr>
+                    <th width="50px">Preview</th>
                     <th width="15%">Time</th>
-                    <th width="60%">File</th>
-                    <th width="25%">Status</th>
+                    <th width="auto">File</th>
+                    <th width="20%">Status</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -166,21 +196,19 @@
     <script>
         var csInterface = new CSInterface();
         
-        // 1. Initialize Log History from Local Storage
+        // 1. Initialize Log History
         var logHistory = JSON.parse(localStorage.getItem("autoImageLogs") || "[]");
 
         // 2. Render History on Startup
         function renderHistory() {
             const tbody = document.querySelector("#logTable tbody");
-            tbody.innerHTML = ""; // Clear current view
-            
-            // Loop through history and recreate rows
+            tbody.innerHTML = "";
             logHistory.forEach(log => {
-                insertRowToDOM(log.id, log.time, log.name, log.status);
+                // Pass null for image data on reload (storage quota optimization)
+                insertRowToDOM(log.id, log.time, log.name, log.status, null);
             });
         }
         
-        // Run immediately
         renderHistory();
 
         function saveLogs() {
@@ -193,22 +221,43 @@
             renderHistory();
         }
 
-        // --- CORE UI FUNCTIONS (Called by Server) ---
+        // --- CORE UI FUNCTIONS ---
 
-        // Helper: Inserts HTML only (used by both Load and New Item)
-        function insertRowToDOM(id, time, name, status) {
+        // Helper: Inserts HTML
+        function insertRowToDOM(id, time, name, status, imgData) {
             const tbody = document.querySelector("#logTable tbody");
             const newRow = tbody.insertRow(0); // Insert at top
             newRow.id = id;
 
-            const timeCell = newRow.insertCell(0);
-            const nameCell = newRow.insertCell(1);
-            const statusCell = newRow.insertCell(2);
-
-            timeCell.innerText = time;
-            nameCell.className = "file-name";
+            // 1. Thumbnail Cell
+            const thumbCell = newRow.insertCell(0);
+            thumbCell.className = "thumb-cell";
             
-            // Set Name & Interactions
+            if (imgData) {
+                const img = document.createElement("img");
+                img.src = imgData;
+                img.className = "thumb-img";
+                thumbCell.appendChild(img);
+            } else {
+                // Placeholder if no image (or history reload)
+                const div = document.createElement("div");
+                div.className = "thumb-placeholder";
+                div.innerText = "IMG";
+                thumbCell.appendChild(div);
+            }
+
+            // 2. Time Cell
+            const timeCell = newRow.insertCell(1);
+            timeCell.innerText = time;
+
+            // 3. Name Cell
+            const nameCell = newRow.insertCell(2);
+            nameCell.className = "file-name";
+
+            // 4. Status Cell
+            const statusCell = newRow.insertCell(3);
+            
+            // Set Content
             if (status === "success") {
                 nameCell.innerText = name;
                 nameCell.title = "Double-click to rename";
@@ -221,16 +270,16 @@
             } else {
                 nameCell.innerHTML = '<span style="color: #666">Downloading...</span>';
                 statusCell.innerHTML = '<span class="badge pending">Pending</span>';
+                // Add a spinner class if desired here
             }
         }
 
-        // 1. Create New Log (Called by Server)
+        // 1. Create New Log
         window.createLogRow = function() {
             const now = new Date();
             const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
             const rowId = 'row-' + Date.now();
             
-            // Add to Data
             const newLog = { 
                 id: rowId, 
                 time: timeStr, 
@@ -239,33 +288,40 @@
             };
             logHistory.push(newLog);
             
-            // Render
-            insertRowToDOM(newLog.id, newLog.time, newLog.name, newLog.status);
+            // Render (No image yet)
+            insertRowToDOM(newLog.id, newLog.time, newLog.name, newLog.status, null);
             
-            // Save
             saveLogs();
             return rowId;
         };
 
-        // 2. Update Log (Called by Server)
-        window.updateLogRow = function(rowId, fileName, statusType) {
-            // Update Data
+        // 2. Update Log (Now accepts imgData)
+        window.updateLogRow = function(rowId, fileName, statusType, imgData) {
+            // Update Data Model
             const logIndex = logHistory.findIndex(l => l.id === rowId);
             if (logIndex !== -1) {
                 logHistory[logIndex].name = fileName;
                 logHistory[logIndex].status = statusType;
+                // NOTE: We do NOT save imgData to localStorage to avoid quota errors.
                 saveLogs();
             }
 
-            // Update DOM directly to show changes instantly
+            // Update DOM
             const row = document.getElementById(rowId);
             if (row) {
-                // We re-render just this row's content by calling insert logic logic? 
-                // Easier to just reload the whole list or update cells manually. 
-                // Let's update cells manually for speed.
-                const nameCell = row.cells[1];
-                const statusCell = row.cells[2];
+                const thumbCell = row.cells[0];
+                const nameCell = row.cells[2];
+                const statusCell = row.cells[3];
                 
+                // Update Image if provided
+                if (imgData) {
+                    thumbCell.innerHTML = ''; // Clear placeholder
+                    const img = document.createElement("img");
+                    img.src = imgData;
+                    img.className = "thumb-img";
+                    thumbCell.appendChild(img);
+                }
+
                 nameCell.innerText = fileName;
                 
                 if (statusType === "success") {
@@ -279,7 +335,7 @@
             }
         };
 
-        // --- RENAME LOGIC (Updated for Persistence) ---
+        // --- RENAME LOGIC ---
         function enableRenaming(cell, oldName, rowId) {
             if (cell.querySelector('input')) return;
 
@@ -291,6 +347,8 @@
             input.style.color = '#fff';
             input.style.border = '1px solid #3498db';
             input.style.outline = 'none';
+            input.style.padding = '2px';
+            input.style.borderRadius = '3px';
             
             let isFinished = false;
 
